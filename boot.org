@@ -124,9 +124,13 @@ configuration, it remains a fairly bad idea as a package
 
 ** Auto-Complete
 #+BEGIN_SRC emacs-lisp
-  (require 'auto-complete-config)
-  (add-to-list 'ac-dictionary-directories (in-emacs-dir "ac-dict"))
-  (ac-config-default)
+  (use-package auto-complete
+  :pin melpa
+  :ensure t
+  :demand t
+  :config 
+  (ac-config-default))
+
 #+END_SRC
 
 ** Ivy
@@ -141,7 +145,7 @@ configuration, it remains a fairly bad idea as a package
   (use-package ivy
     :pin melpa
     :ensure t
-    :demand ivy
+    :demand t
     :bind( ("C-s" . swiper)
            ("C-c C-r" . ivy-resume)
            ("<f6>" . ivy-resume)
