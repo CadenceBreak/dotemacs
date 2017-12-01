@@ -1,0 +1,269 @@
+* Overview
+
+emacs init file replacement using org-babel. https://github.com/ninrod/dotfiles/blob/master/emacs/ is a good
+reference for the technique and some other package management vodoo that isn't integrated.
+
+* Functions
+** Utility functions used in this file
+#+BEGIN_SRC emacs-lisp
+(defun in-emacs-dir (filename)
+  (expand-file-name filename user-emacs-directory))
+#+END_SRC
+** Indent Whole Buffer
+#+BEGIN_SRC emacs-lisp
+  (defun iwb ()
+    "indent whole buffer"
+    (interactive)
+    (delete-trailing-whitespace)
+    (indent-region (point-min) (point-max) nil)
+    (untabify (point-min) (point-max)))
+#+END_SRC
+
+** Sudo Edit
+#+BEGIN_SRC emacs-lisp
+  (require 'tramp)
+  (defun sudo-edit (&optional arg)
+    "Edit currently visited file as root.
+
+  With a prefix ARG prompt for a file to visit.
+  Will also prompt for a file to visit if current
+  buffer is not visiting a file."
+    (interactive "P")
+    (if (or arg (not buffer-file-name))
+        (find-file (concat "/sudo:root@localhost:"
+                           (ido-read-file-name "Find file(as root): ")))
+      (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
+#+END_SRC
+** Copy Line
+#+BEGIN_SRC emacs-lisp
+  (defun copy-line (arg)
+    "Copy lines (as many as prefix argument) in the kill ring.
+      Ease of use features:
+      - Move to start of next line.
+      - Appends the copy on sequential calls.
+      - Use newline as last char even on the last line of the buffer.
+      - If region is active, copy its lines."
+    (interactive "p")
+    (let ((beg (line-beginning-position))
+          (end (line-end-position arg)))
+      (when mark-active
+        (if (> (point) (mark))
+            (setq beg (save-excursion (goto-char (mark)) (line-beginning-position)))
+          (setq end (save-excursion (goto-char (mark)) (line-end-position)))))
+      (if (eq last-command 'copy-line)
+          (kill-append (buffer-substring beg end) (< end beg))
+        (kill-ring-save beg end)))
+    (kill-append "\n" nil)
+    (beginning-of-line (or (and arg (1+ arg)) 2))
+    (if (and arg (not (= 1 arg))) (message "%d lines copied" arg)))
+#+END_SRC
+* Mode Configuration
+** Better Defaults (as source until integrated)
+ido, uniquify, better zap to char and sane ediff defaults. No customization so while a good source of
+configuration, it remains a fairly bad idea as a package
+
+#+BEGIN_SRC emacs-lisp
+(progn
+    ;; (unless (fboundp 'helm-mode)
+    ;;   (ido-mode t)
+    ;;   (setq ido-enable-flex-matching t))
+
+    (menu-bar-mode -1)
+    (when (fboundp 'tool-bar-mode)
+      (tool-bar-mode -1))
+    (when (fboundp 'scroll-bar-mode)
+      (scroll-bar-mode -1))
+    (when (fboundp 'horizontal-scroll-bar-mode)
+      (horizontal-scroll-bar-mode -1))
+
+    (autoload 'zap-up-to-char "misc"
+      "Kill up to, but not including ARGth occurrence of CHAR." t)
+
+    (require 'uniquify)
+    (setq uniquify-buffer-name-style 'forward)
+
+    (require 'saveplace)
+    (setq-default save-place t)
+
+    (global-set-key (kbd "M-/") 'hippie-expand)
+    (global-set-key (kbd "C-x C-b") 'ibuffer)
+    (global-set-key (kbd "M-z") 'zap-up-to-char)
+
+    (global-set-key (kbd "C-s") 'isearch-forward-regexp)
+    (global-set-key (kbd "C-r") 'isearch-backward-regexp)
+    (global-set-key (kbd "C-M-s") 'isearch-forward)
+    (global-set-key (kbd "C-M-r") 'isearch-backward)
+
+    (show-paren-mode 1)
+    (setq-default indent-tabs-mode nil)
+    (setq save-interprogram-paste-before-kill t
+          apropos-do-all t
+          mouse-yank-at-point t
+          require-final-newline t
+          visible-bell t
+          load-prefer-newer t
+          ediff-window-setup-function 'ediff-setup-windows-plain
+          save-place-file (concat user-emacs-directory "places")
+          backup-directory-alist `(("." . ,(concat user-emacs-directory
+                                                   "backups")))))
+
+#+END_SRC
+** RecentFiles
+#+BEGIN_SRC emacs-lisp
+  (require 'recentf)
+  (recentf-mode 1)
+  (setq recentf-max-menu-items 50)
+  (global-set-key "\C-x\ \C-r" 'recentf-open-files)
+#+END_SRC
+
+** Semantic
+
+#+BEGIN_SRC emacs-lisp
+  (semantic-mode 1)
+#+END_SRC
+
+** Auto-Complete
+#+BEGIN_SRC emacs-lisp
+  (require 'auto-complete-config)
+  (add-to-list 'ac-dictionary-directories (in-emacs-dir "ac-dict"))
+  (ac-config-default)
+#+END_SRC
+
+** Ivy
+#+BEGIN_SRC emacs-lisp
+(use-package counsel
+    :pin melpa
+    :ensure t)
+(use-package swiper
+    :pin melpa
+    :ensure t)
+
+  (use-package ivy
+    :pin melpa
+    :ensure t
+    :demand ivy
+    :bind( ("C-s" . swiper)
+           ("C-c C-r" . ivy-resume)
+           ("<f6>" . ivy-resume)
+           ("M-x" . counsel-M-x)
+           ("C-x C-f" . counsel-find-file)
+           ("<f1> f" . counsel-describe-function)
+           ("<f1> v" . counsel-describe-variable)
+           ("<f1> l" . counsel-find-library)
+           ("<f2> i" . counsel-info-lookup-symbol)
+           ("<f2> u" . counsel-unicode-char)
+           ("C-c g" . counsel-git)
+           ("C-c j" . counsel-git-grep)
+           ("C-c k" . counsel-ag)
+           ("C-x l" . counsel-locate)
+           ("C-S-o" . counsel-rhythmbox))
+    :config (ivy-mode t)
+    (setq ivy-use-virtual-buffers t
+          ivy-count-format "%d/%d ")
+  ;;  (enable-recursive-minibuffers t)
+  (define-key minibuffer-local-map (kbd "C-r") 'counsel-minibuffer-history))
+#+END_SRC
+
+** Orgmode
+#+BEGIN_SRC emacs-lisp
+  (defun my-org-mode-hook ()
+    (turn-on-auto-fill)
+    (set-fill-column 110)
+    (setq org-file-apps
+          (append '(
+                    ("\\.doc\\'" . default)
+                    ("\\.docx\\'" . default)
+                    )
+                  org-file-apps )))
+
+  (require 'org-inlinetask)
+
+  (add-hook 'org-mode-hook
+            'my-org-mode-hook)
+#+END_SRC
+
+** Git - needs paths or a package. Look for better version to enable.
+
+#+BEGIN_SRC emacs-lisp
+;;  (require 'git)
+#+END_SRC
+* Programming Language Mode Customization
+** c++
+
+#+BEGIN_SRC emacs-lisp
+(c-add-style "resip-style" 
+	     '("ellemtel"
+	       (indent-tabs-mode . nil)
+	       (c-offsets-alist . ((innamespace . [0])))))
+
+(defun my-c++-mode-hook ()
+  (c-set-style "resip-style")        ; use my-style defined above
+  (auto-fill-mode)         
+  (c-toggle-auto-hungry-state 1)
+  (set-fill-column 90))
+
+(add-hook 'c++-mode-hook
+          'my-c++-mode-hook)
+
+(add-hook 'c-mode-common-hook
+  (lambda()
+    (local-set-key [(control tab)] 'hs-toggle-hiding)
+    ;; (local-set-key (kbd "C-c <left>")  'hs-hide-block)
+    ;; (local-set-key (kbd "C-c <up>")    'hs-hide-all)
+    ;; (local-set-key (kbd "C-c <down>")  'hs-show-all)
+    (hs-minor-mode t)))
+#+END_SRC 
+
+* Environment
+** Options not in customize
+#+BEGIN_SRC emacs-lisp
+  (put 'narrow-to-region 'disabled nil)
+  (setq special-display-regexps (remove "[ ]?\\*[hH]elp.*" special-display-regexps))
+  (setq ns-function-modifier 'hyper)
+;; ?dcm? - Should this be use-package or customize?
+  (when (fboundp 'winner-mode)
+    (winner-mode 1))
+#+END_SRC
+
+** Global Keybindings
+#+BEGIN_SRC emacs-lisp
+  (global-set-key [f3] 'ido-switch-buffer)
+  (global-set-key [f4] 'bury-buffer)
+  (global-set-key [f7] 'next-error)
+  (global-set-key [(S-f7)] 'previous-error)
+  (global-set-key (kbd "C-c o") 'occur)
+  (global-set-key "\C-c\C-k" 'copy-line)
+#+END_SRC
+
+* Org
+
+** Basics
+#+BEGIN_SRC emacs-lisp
+  (global-set-key "\C-cl" 'org-store-link)
+  (global-set-key "\C-ca" 'org-agenda)
+  (global-set-key "\C-cc" 'org-capture)
+  (global-set-key "\C-cb" 'org-iswitchb)
+#+END_SRC
+
+** Gtd
+#+BEGIN_SRC emacs-lisp
+(setq org-capture-templates '(("t" "Todo [inbox]" entry
+                               (file+headline "~/gtd/inbox.org" "Tasks")
+                               "* TODO %i%?")
+                              ("T" "Tickler" entry
+                               (file+headline "~/gtd/tickler.org" "Tickler")
+                               "* %i%? \n %U")))
+
+(setq org-agenda-files '("~/gtd/inbox.org"
+                         "~/gtd/gtd.org"
+                         "~/gtd/tickler.org"))
+
+(setq org-refile-targets '(("~/gtd/gtd.org" :maxlevel . 3)
+                           ("~/gtd/someday.org" :level . 1)
+                           ("~/gtd/tickler.org" :maxlevel . 2)))
+
+(setq org-todo-keywords '((sequence "TODO(t)" "WAITING(w)" "|" "DONE(d)")))
+#+END_SRC
+
+** Brain
+   
